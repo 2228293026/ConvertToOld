@@ -93,7 +93,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        Toast.makeText(getApplication(), "更新日期：2024.7.13\n作者：HitMargin | QQ：2228293026", Toast.LENGTH_SHORT).show();
+        Toast.makeText(getApplication(), "更新日期：2024.8.13\n作者：HitMargin | QQ：2228293026", Toast.LENGTH_SHORT).show();
 //        Toast.makeText(getApplication(), "作者：HitMargin | QQ：2228293026", Toast.LENGTH_SHORT).show();
 
         currentDirectoryTextView = findViewById(R.id.currentDirectoryTextView);
@@ -490,6 +490,9 @@ public class MainActivity extends AppCompatActivity {
         specialMethodsAndKeywords.add("SetDefaultText");
         specialMethodsAndKeywords.add("SetFrameRate");
         specialMethodsAndKeywords.add("\"targetPlanet\": \"GreenPlanet\"");
+        specialMethodsAndKeywords.add("EmitParticle");
+        specialMethodsAndKeywords.add("SetParticle");
+        specialMethodsAndKeywords.add("AddParticle");
 
         // 检查行是否包含特殊方法或关键词
         return specialMethodsAndKeywords.stream().anyMatch(method -> line.contains(method));
