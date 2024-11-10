@@ -482,6 +482,10 @@ public class MainActivity extends AppCompatActivity {
 
     // 检查行是否包含特殊方法或关键词
     private boolean enterDeleteMode(String line) {
+        if (modifyVersionOnly.isChecked())
+        {
+            return false;
+        }
         Set<String> specialMethodsAndKeywords = new HashSet<>();
         specialMethodsAndKeywords.add("SetObject");
         specialMethodsAndKeywords.add("AddObject");
@@ -493,6 +497,7 @@ public class MainActivity extends AppCompatActivity {
         specialMethodsAndKeywords.add("EmitParticle");
         specialMethodsAndKeywords.add("SetParticle");
         specialMethodsAndKeywords.add("AddParticle");
+        specialMethodsAndKeywords.add("SetInputEvent");
 
         // 检查行是否包含特殊方法或关键词
         return specialMethodsAndKeywords.stream().anyMatch(method -> line.contains(method));
