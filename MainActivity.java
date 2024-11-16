@@ -93,7 +93,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        Toast.makeText(getApplication(), "更新日期：2024.8.13\n作者：HitMargin | QQ：2228293026", Toast.LENGTH_SHORT).show();
+        Toast.makeText(getApplication(), "更新日期：2024.11.16\n作者：HitMargin | QQ：2228293026", Toast.LENGTH_SHORT).show();
 //        Toast.makeText(getApplication(), "作者：HitMargin | QQ：2228293026", Toast.LENGTH_SHORT).show();
 
         currentDirectoryTextView = findViewById(R.id.currentDirectoryTextView);
@@ -153,7 +153,7 @@ public class MainActivity extends AppCompatActivity {
 
                 @Override
                 public void onClick(View view) {
-                   String message = "额外修改：修复移动摄像头错误和背景错误\n只修改版本号是为11\n该工具免费提供！禁止倒卖\n更新内容如下\n新增正常修改，如果谱面摄像头有问题，请开启额外修改\n修复错误\n(如果出错请在编辑器里重新保存关卡再转换)";
+                   String message = "需知：特殊修改：修复移动摄像头错误和背景错误\n只修改版本号是为11\n该工具免费提供！禁止倒卖\n更新内容如下\n修复错误\n(如果出错请在编辑器里重新保存关卡再转换),修复暂停节拍错误";
                     showMessageDialog(message);
                 }
             });
@@ -543,7 +543,7 @@ public class MainActivity extends AppCompatActivity {
     if (line.trim().startsWith("\"version\":")) {
         return "		\"version\": 11 ,";
     }
-        if (modifyVersionOnly.isChecked()) {
+    if (modifyVersionOnly.isChecked()) {
         // 如果只修改版本号，检查并替换版本号
         if (line.trim().startsWith("\"version\":")) {
             return "		\"version\": 11 ,";
@@ -551,30 +551,36 @@ public class MainActivity extends AppCompatActivity {
         // 其他行不做修改
         return line;
     }
-        
+    
     // 根据额外修改标志进行其他修改
     if (additionalmodifications.isChecked()) {
-            String modifiedLines = line;
-            modifiedLines = modifiedLines
+        line = line
             .replace("true", "\"Enabled\"")
             .replace("false", "\"Disabled\"")
             .replace("\"targetPlanet\": \"All\"", "\"targetPlanet\": \"Both\"")
             .replace("null", "0")
             .replace("Unscaled", "FitToScreen")
             .replace("\"lockRot\": \"Disabled\"", "\"lockRot\": \"Enabled\"");
-    
-    return modifiedLines;
     }
-        String modifiedLine = line;
+
+    // 根据normalmodify标志进行其他修改
     if (normalmodify.isChecked()) {
-            modifiedLine = modifiedLine
+        line = line
             .replace("true", "\"Enabled\"")
             .replace("false", "\"Disabled\"")
             .replace("\"targetPlanet\": \"All\"", "\"targetPlanet\": \"Both\"");
-            }
-        return modifiedLine;
-        
     }
+
+    // 如果行中包含"Pause"，则进行特定的替换
+    if (line.contains("Pause")) {
+        line = line
+            .replace("\"Backward\"", "-1 ")
+            .replace("\"None\"", "0 ")
+            .replace("\"Forward\"", "1 ");
+    }
+
+    return line;
+}
     
     
 
