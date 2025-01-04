@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+     xmlns:android="http://schemas.android.com/apk/res/android"
+     xmlns:tools="http://schemas.android.com/tools"
+     android:layout_height="wrap_content"
+     android:layout_width="match_parent"
+     android:orientation="vertical">
+
+    <Spinner
+         android:layout_height="wrap_content"
+         android:layout_width="wrap_content"
+         android:entries="@array/version_entries"
+         android:id="@+id/versionSpinner">
+
+    </Spinner>
+
+    <Button
+         android:layout_height="40dp"
+         android:layout_width="80dp"
+         android:translationX="75dp"
+         android:translationY="10dp"
+         style="?android:attr/buttonStyleSmall"
+         android:layout_marginTop="-40dp"
+         android:layout_marginStart="200dp"
+         android:text="过滤器"
+         android:id="@+id/filterButton" />
+
+    <Button
+         android:layout_height="40dp"
+         android:layout_width="53dp"
+         android:padding="5dp"
+         android:translationX="25dp"
+         android:translationY="10dp"
+         style="?android:attr/buttonStyleSmall"
+         android:layout_marginTop="-40dp"
+         android:layout_marginStart="205dp"
+         android:text="说明"
+         android:id="@+id/explain" />
+
+    <RadioGroup
+         android:layout_height="wrap_content"
+         android:layout_width="match_parent"
+         android:orientation="horizontal"
+         android:id="@+id/radioGroup">
+
+        <RadioButton
+             android:layout_height="wrap_content"
+             android:layout_width="wrap_content"
+             android:checked="true"
+             android:id="@+id/normalmodify"
+             android:text="正常修改" />
+
+        <RadioButton
+             android:layout_height="wrap_content"
+             android:layout_width="wrap_content"
+             android:checked="false"
+             android:text="额外修改"
+             android:id="@+id/additionalmodifications" />
+
+        <RadioButton
+             android:layout_height="wrap_content"
+             android:layout_width="wrap_content"
+             android:checked="false"
+             android:id="@+id/modifyVersionOnly"
+             android:text="只修改版本号" />
+
+    </RadioGroup>
+
+    <TextView
+         android:layout_height="wrap_content"
+         android:layout_width="match_parent"
+         android:textSize="18sp"
+         android:id="@+id/currentDirectoryTextView"
+         android:text="当前目录："
+         android:textStyle="bold" />
+
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+         android:layout_height="match_parent"
+         android:layout_width="match_parent"
+         android:id="@+id/swipeRefreshLayout">
+
+        <ListView
+             android:layout_height="wrap_content"
+             android:layout_width="match_parent"
+             android:divider="@android:color/darker_gray"
+             android:layout_weight="1"
+             android:id="@+id/listView"
+             android:dividerHeight="1dp">
+
+        </ListView>
+
+    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+</LinearLayout>

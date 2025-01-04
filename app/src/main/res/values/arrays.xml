@@ -1,0 +1,6 @@
+<resources>
+    <string-array name="version_entries">
+        <item>2.4</item>
+        <item>2.8</item>
+    </string-array>
+</resources>
