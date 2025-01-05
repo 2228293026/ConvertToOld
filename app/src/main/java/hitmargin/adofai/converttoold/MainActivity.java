@@ -60,6 +60,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -94,8 +96,10 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        Toast.makeText(getApplication(), "更新日期：2024.12.30\n作者：HitMargin | QQ：2228293026", Toast.LENGTH_SHORT).show();
-//        Toast.makeText(getApplication(), "作者：HitMargin | QQ：2228293026", Toast.LENGTH_SHORT).show();
+        Date currentDate = new Date();
+        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy.MM.dd HH:mm:ss");
+        String formattedDate = dateFormat.format(currentDate);
+        Toast.makeText(getApplication(), "构建日期：" + formattedDate + "\n作者：HitMargin | QQ：2228293026", Toast.LENGTH_SHORT).show();
 
         currentDirectoryTextView = findViewById(R.id.currentDirectoryTextView);
         additionalmodifications = findViewById(R.id.additionalmodifications);
@@ -186,7 +190,7 @@ public class MainActivity extends AppCompatActivity {
 
                 @Override
                 public void onClick(View view) {
-                   String message = "需知：特殊修改：修复移动摄像头错误和背景错误\n只修改版本号是为11\n该工具免费提供！禁止倒卖\n更新内容如下\n修复错误\n(如果出错请在编辑器里重新保存关卡再转换),修复暂停节拍错误";
+                   String message = "需知：特殊修改：修复移动摄像头错误和背景错误\n只修改版本号是为11\n该工具免费提供！禁止倒卖\n更新内容如下\n修复错误\n(如果出错请在编辑器里重新保存关卡再转换),修复暂停节拍错误,新增版本选择，用的什么版本就选择哪个版本,新增修复自由轨道";
                     showMessageDialog(message);
                 }
             });
@@ -589,7 +593,13 @@ private String processLine(String line) {
                 .replace("\"angleCorrectionDir\": \"Backward\"", "\"angleCorrectionDir\": -1 ")
                 .replace("\"angleCorrectionDir\": \"None\"", "\"angleCorrectionDir\": 0 ")
                 .replace("\"angleCorrectionDir\": \"Forward\"", "\"angleCorrectionDir\": 1 ");
-                return line;
+        }
+        // 如果行中包含"FreeRoam"，则进行特定的替换
+        if (line.contains("\"eventType\": \"FreeRoam\"")) {
+            line = line
+                .replace("\"angleCorrectionDir\": \"Backward\"", "\"angleCorrectionDir\": -1 ")
+                .replace("\"angleCorrectionDir\": \"None\"", "\"angleCorrectionDir\": 0 ")
+                .replace("\"angleCorrectionDir\": \"Forward\"", "\"angleCorrectionDir\": 1 ");
         }
     }
 
@@ -625,6 +635,13 @@ private String processLine(String line) {
 
         // 如果行中包含"Pause"，则进行特定的替换
         if (line.contains("\"eventType\": \"Pause\"")) {
+            line = line
+                .replace("\"angleCorrectionDir\": \"Backward\"", "\"angleCorrectionDir\": -1 ")
+                .replace("\"angleCorrectionDir\": \"None\"", "\"angleCorrectionDir\": 0 ")
+                .replace("\"angleCorrectionDir\": \"Forward\"", "\"angleCorrectionDir\": 1 ");
+        }
+            // 如果行中包含"FreeRoam"，则进行特定的替换
+        if (line.contains("\"eventType\": \"FreeRoam\"")) {
             line = line
                 .replace("\"angleCorrectionDir\": \"Backward\"", "\"angleCorrectionDir\": -1 ")
                 .replace("\"angleCorrectionDir\": \"None\"", "\"angleCorrectionDir\": 0 ")
