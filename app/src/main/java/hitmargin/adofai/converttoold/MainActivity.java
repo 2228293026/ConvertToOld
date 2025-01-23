@@ -14,6 +14,8 @@ import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
 import android.preference.PreferenceManager;
 import android.provider.Settings;
 import android.text.InputType;
@@ -31,6 +33,8 @@ import android.widget.Spinner;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.view.inputmethod.InputMethodManager;
+import android.content.Context;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
@@ -71,13 +75,14 @@ public class MainActivity extends AppCompatActivity {
 
     private static final int REQUEST_PERMISSION = 100;
 
+    private List<String> itemList; // 存储文件名
+    private List<String> timeList; // 存储修改时间
     private RadioButton modifyVersionOnly;
     private RadioButton normalmodify;
     private Button explain;
     private TextView currentDirectoryTextView;
     private RadioButton additionalmodifications;
     private ListView listView;
-    private List<String> itemList;
     private ArrayAdapter<String> adapter;
     private Stack<String> directoryStack;
     private File currentDirectory;
@@ -105,11 +110,15 @@ public class MainActivity extends AppCompatActivity {
         String formattedDate = dateFormat.format(currentDate);
         // Toast.makeText(getApplication(), "构建日期：" + formattedDate + "\n作者：HitMargin |
         // QQ：2228293026", Toast.LENGTH_SHORT).show();
+        /*
         Toast.makeText(
                         getApplication(),
                         "构建日期：2025.1.23\n作者：HitMargin | QQ：2228293026",
                         Toast.LENGTH_SHORT)
                 .show();
+        */
+        itemList = new ArrayList<>();
+        timeList = new ArrayList<>();
         currentDirectoryTextView = findViewById(R.id.currentDirectoryTextView);
         additionalmodifications = findViewById(R.id.additionalmodifications);
         explain = findViewById(R.id.explain);
@@ -132,6 +141,14 @@ public class MainActivity extends AppCompatActivity {
                         this, R.array.version_entries, android.R.layout.simple_spinner_item);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         versionSpinner.setAdapter(adapter);
+
+        currentDirectoryTextView.setOnClickListener(
+                new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        showPathInputDialog();
+                    }
+                });
 
         // 设置 Spinner 选择监听器
         versionSpinner.setOnItemSelectedListener(
@@ -191,18 +208,31 @@ public class MainActivity extends AppCompatActivity {
                     @Override
                     public void onItemClick(
                             AdapterView<?> parent, View view, int position, long id) {
-                        String selectedItem = itemList.get(position);
-                        File selectedFile = new File(currentDirectory, selectedItem);
+                        String item = itemList.get(position); // 获取完整的字符串
+                        String fileName = item.split("\n")[0]; // 文件名是第一行
+                        File selectedFile = new File(currentDirectory, fileName);
+
                         if (selectedFile.isDirectory()) {
-                            directoryStack.push(currentDirectory.getAbsolutePath());
-                            displayFiles(selectedFile);
+                            try {
+                                directoryStack.push(currentDirectory.getAbsolutePath());
+                                displayFiles(selectedFile); // 跳转到新的文件夹
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                                Toast.makeText(
+                                                MainActivity.this,
+                                                "无法打开文件夹：" + e.getMessage(),
+                                                Toast.LENGTH_SHORT)
+                                        .show();
+                            }
                         } else {
-                            // 检查如果点击的是.adofai文件，则调用方法处理文件
-                            if (selectedItem.endsWith(".adofai")) {
+                            if (fileName.toLowerCase().endsWith(".adofai")) {
                                 ConvertToOld(selectedFile);
                             } else {
-                                // 如果不是.adofai文件，弹出提示
-                                showMessageDialog("该文件不是.adofai文件");
+                                Toast.makeText(
+                                                MainActivity.this,
+                                                "该文件不是.adofai文件",
+                                                Toast.LENGTH_SHORT)
+                                        .show();
                             }
                         }
                     }
@@ -245,34 +275,119 @@ public class MainActivity extends AppCompatActivity {
         swipeRefreshLayout.setRefreshing(false);
     }
 
-    private void displayFiles(File directory) {
-        currentDirectory = directory;
-        currentDirectoryTextView.setText("当前目录：" + directory.getAbsolutePath());
-        itemList.clear();
+    private void showPathInputDialog() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("输入路径");
 
-        File[] files =
-                directory.listFiles(
-                        new FileFilter() {
-                            @Override
-                            public boolean accept(File file) {
-                                // 如果是文件夹，直接返回true
-                                if (file.isDirectory()) {
-                                    return true;
-                                }
-                                // 如果是文件，只显示以.adofai结尾的文件
-                                return file.getName().toLowerCase().endsWith(".adofai");
+        // 设置输入框
+        final EditText input = new EditText(this);
+        input.setInputType(InputType.TYPE_CLASS_TEXT);
+        input.setText(currentDirectory.getAbsolutePath()); // 设置默认值为当前路径
+        input.selectAll(); // 选中全部内容，方便用户直接修改
+
+        builder.setView(input);
+
+        // 设置确认按钮
+        builder.setPositiveButton(
+                "确定",
+                new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        String newPath = input.getText().toString().trim();
+                        if (!newPath.isEmpty()) {
+                            File newDirectory = new File(newPath);
+                            if (newDirectory.exists() && newDirectory.isDirectory()) {
+                                displayFiles(newDirectory); // 跳转到新路径
+                            } else {
+                                Toast.makeText(MainActivity.this, "路径无效或不存在！", Toast.LENGTH_SHORT)
+                                        .show();
+                            }
+                        }
+                    }
+                });
+
+        // 设置取消按钮
+        builder.setNegativeButton(
+                "取消",
+                new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        dialog.cancel();
+                    }
+                });
+
+        // 显示对话框
+        final AlertDialog dialog = builder.create();
+        dialog.show();
+
+        // 请求输入框的焦点并显示输入法
+        // 确保输入框获取焦点
+        input.requestFocus();
+
+        // 使用 Handler 来延迟执行，确保 UI 线程已经完成布局
+        new Handler(Looper.getMainLooper())
+                .post(
+                        () -> {
+                            InputMethodManager imm =
+                                    (InputMethodManager)
+                                            getSystemService(Context.INPUT_METHOD_SERVICE);
+                            if (imm != null) {
+                                imm.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT);
                             }
                         });
+    }
 
-        if (files != null) {
-            // 对文件列表按字母顺序排序
-            Arrays.sort(files);
-            for (File file : files) {
-                itemList.add(file.getName());
+    private void displayFiles(File directory) {
+        try {
+            currentDirectory = directory;
+            currentDirectoryTextView.setText("当前目录：" + directory.getAbsolutePath());
+            itemList.clear();
+
+            File[] files =
+                    directory.listFiles(
+                            new FileFilter() {
+                                @Override
+                                public boolean accept(File file) {
+                                    if (file.isDirectory()) {
+                                        return true;
+                                    }
+                                    return file.getName().toLowerCase().endsWith(".adofai");
+                                }
+                            });
+
+            if (files != null) {
+                // 分别存储文件夹和文件
+                List<File> folders = new ArrayList<>();
+                List<File> adofaiFiles = new ArrayList<>();
+
+                for (File file : files) {
+                    if (file.isDirectory()) {
+                        folders.add(file);
+                    } else {
+                        adofaiFiles.add(file);
+                    }
+                }
+
+                // 对文件夹和文件分别排序
+                folders.sort((f1, f2) -> f1.getName().compareTo(f2.getName()));
+                adofaiFiles.sort((f1, f2) -> f1.getName().compareTo(f2.getName()));
+
+                // 先添加文件夹，再添加文件
+                for (File folder : folders) {
+                    itemList.add(folder.getName());
+                }
+                for (File adofaiFile : adofaiFiles) {
+                    itemList.add(adofaiFile.getName());
+                }
             }
+
+            adapter.notifyDataSetChanged();
+            swipeRefreshLayout.setRefreshing(false);
+        } catch (Exception e) {
+            e.printStackTrace();
+            Toast.makeText(MainActivity.this, "无法加载目录：" + e.getMessage(), Toast.LENGTH_SHORT)
+                    .show();
         }
-        adapter.notifyDataSetChanged();
-        swipeRefreshLayout.setRefreshing(false);
     }
 
     private void showFilterInputDialog() {
@@ -343,10 +458,20 @@ public class MainActivity extends AppCompatActivity {
             int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == REQUEST_PERMISSION) {
-            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            boolean allPermissionsGranted = true;
+            for (int result : grantResults) {
+                if (result != PackageManager.PERMISSION_GRANTED) {
+                    allPermissionsGranted = false;
+                    break;
+                }
+            }
+
+            if (allPermissionsGranted) {
+                Toast.makeText(this, "权限已开启，可以继续操作！", Toast.LENGTH_SHORT).show();
                 displayFiles(Environment.getExternalStorageDirectory());
+                // 在这里执行需要权限的操作
             } else {
-                Toast.makeText(this, "需要读写存储权限才能查看文件！", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "权限被拒绝，部分功能可能无法使用！", Toast.LENGTH_SHORT).show();
             }
         }
     }
@@ -390,6 +515,21 @@ public class MainActivity extends AppCompatActivity {
             case MENU_RENAME:
                 final EditText renameEditText = new EditText(this);
                 renameEditText.setInputType(InputType.TYPE_CLASS_TEXT);
+
+                // 提取文件名和后缀
+                String fileName = selectedItem;
+                final String fileExtension; // 声明为 final
+                int dotIndex = fileName.lastIndexOf('.');
+                if (dotIndex > 0) {
+                    fileExtension = fileName.substring(dotIndex); // 提取后缀
+                    fileName = fileName.substring(0, dotIndex); // 提取文件名部分
+                } else {
+                    fileExtension = ""; // 如果没有后缀，设置为空字符串
+                }
+
+                renameEditText.setText(fileName); // 设置文件名部分作为默认值
+                renameEditText.selectAll(); // 选中文件名部分，方便用户修改
+
                 new AlertDialog.Builder(this)
                         .setTitle("重命名")
                         .setMessage("输入新的文件名称")
@@ -400,12 +540,17 @@ public class MainActivity extends AppCompatActivity {
                                     @Override
                                     public void onClick(DialogInterface dialog, int which) {
                                         String newName = renameEditText.getText().toString();
-                                        File newFile = new File(currentDirectory, newName);
-                                        if (selectedFile.renameTo(newFile)) {
-                                            displayFiles(currentDirectory);
-                                            showMessageDialog("重命名成功！");
+                                        if (!newName.isEmpty()) {
+                                            newName += fileExtension; // 添加后缀
+                                            File newFile = new File(currentDirectory, newName);
+                                            if (selectedFile.renameTo(newFile)) {
+                                                displayFiles(currentDirectory);
+                                                showMessageDialog("重命名成功！");
+                                            } else {
+                                                showMessageDialog("重命名失败！");
+                                            }
                                         } else {
-                                            showMessageDialog("重命名失败！");
+                                            showMessageDialog("文件名不能为空！");
                                         }
                                     }
                                 })
@@ -1028,7 +1173,7 @@ public class MainActivity extends AppCompatActivity {
                 showPermissionPromptDialog();
             } else {
                 // 权限已开启，可以继续操作
-                // Toast.makeText(this, "所有文件访问权限已开启！", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "所有文件访问权限已开启！", Toast.LENGTH_SHORT).show();
             }
         } else {
             // 对于Android 11以下版本，检查READ_EXTERNAL_STORAGE权限
@@ -1041,6 +1186,11 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 // 权限已开启，可以继续操作
                 Toast.makeText(this, "存储权限已开启！", Toast.LENGTH_SHORT).show();
+                Toast.makeText(
+                                getApplication(),
+                                "构建日期：2025.1.23\n作者：HitMargin | QQ：2228293026",
+                                Toast.LENGTH_SHORT)
+                        .show();
             }
         }
     }
@@ -1051,7 +1201,12 @@ public class MainActivity extends AppCompatActivity {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             if (Environment.isExternalStorageManager()) {
                 // 用户已授予所有文件访问权限，可以继续操作
-                // Toast.makeText(this, "所有文件访问权限已开启！", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "所有文件访问权限已开启！", Toast.LENGTH_SHORT).show();
+                Toast.makeText(
+                                getApplication(),
+                                "构建日期：2025.1.23\n作者：HitMargin | QQ：2228293026",
+                                Toast.LENGTH_SHORT)
+                        .show();
                 // 在这里执行需要权限的操作
             } else {
                 // 用户未授予权限
