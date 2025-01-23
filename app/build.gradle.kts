@@ -10,10 +10,10 @@ android {
     
     defaultConfig {
         applicationId = "hitmargin.adofai.converttoold"
-        minSdk = 16
-        targetSdk = 28
-        versionCode = 125
-        versionName = "1.2.5"
+        minSdk = 30
+        targetSdk = 33
+        versionCode = 126
+        versionName = "1.2.6"
         
         vectorDrawables { 
             useSupportLibrary = true
