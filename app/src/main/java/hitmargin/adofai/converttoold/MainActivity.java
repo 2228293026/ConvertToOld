@@ -22,6 +22,7 @@ import android.text.InputType;
 import android.view.ContextMenu;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
@@ -33,13 +34,12 @@ import android.widget.Spinner;
 import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
-import android.view.inputmethod.InputMethodManager;
-import android.content.Context;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.recyclerview.widget.RecyclerView;
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout;
 
 import java.io.BufferedOutputStream;
@@ -54,9 +54,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+import java.math.BigDecimal;
 import java.nio.channels.FileChannel;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -67,9 +70,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.math.BigDecimal;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -351,33 +351,35 @@ public class MainActivity extends AppCompatActivity {
                                     if (file.isDirectory()) {
                                         return true;
                                     }
-                                    return file.getName().toLowerCase().endsWith(".adofai");
+                                    // 修改这里：添加对.zip文件的判断
+                                    String name = file.getName().toLowerCase();
+                                    return name.endsWith(".adofai") || name.endsWith(".zip");
                                 }
                             });
 
             if (files != null) {
                 // 分别存储文件夹和文件
                 List<File> folders = new ArrayList<>();
-                List<File> adofaiFiles = new ArrayList<>();
+                List<File> validFiles = new ArrayList<>(); // 修改变量名
 
                 for (File file : files) {
                     if (file.isDirectory()) {
                         folders.add(file);
                     } else {
-                        adofaiFiles.add(file);
+                        validFiles.add(file); // 包含.adofai和.zip文件
                     }
                 }
 
                 // 对文件夹和文件分别排序
                 folders.sort((f1, f2) -> f1.getName().compareTo(f2.getName()));
-                adofaiFiles.sort((f1, f2) -> f1.getName().compareTo(f2.getName()));
+                validFiles.sort((f1, f2) -> f1.getName().compareTo(f2.getName())); // 排序所有有效文件
 
                 // 先添加文件夹，再添加文件
                 for (File folder : folders) {
                     itemList.add(folder.getName());
                 }
-                for (File adofaiFile : adofaiFiles) {
-                    itemList.add(adofaiFile.getName());
+                for (File validFile : validFiles) {
+                    itemList.add(validFile.getName());
                 }
             }
 
@@ -509,8 +511,8 @@ public class MainActivity extends AppCompatActivity {
         switch (item.getItemId()) {
             case MENU_COPY:
                 copiedFile = selectedFile;
-                lastActionWasCopy = true; // 记录上一次的操作是复制
-                showMessageDialog("已选择：" + selectedItem + " ！");
+                lastActionWasCopy = true;
+                Toast.makeText(this, "已选择：" + selectedItem, Toast.LENGTH_SHORT).show();
                 return true;
             case MENU_RENAME:
                 final EditText renameEditText = new EditText(this);
@@ -833,9 +835,11 @@ public class MainActivity extends AppCompatActivity {
 
     private String[] events = {
         "ScaleMargin",
-        "ScaleRadius", /*"ScalePlanets", */
+        "ScaleRadius",
+        "ScalePlanets",
         "Multitap",
-        "Checkpoint", /*"RepeatEvents", */
+        "Checkpoint",
+        "RepeatEvents",
         "PlaySound"
     };
 
@@ -966,67 +970,49 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private String modifyGeneralEvents(String line) {
-        StringBuilder sb = new StringBuilder(line); // 使用原始数据作为基础
-        int i = 0;
-
-        while (i < line.length()) {
-            char c = line.charAt(i);
-
-            // 检测字段名后的冒号，判断是否为数值字段
-            if (c == ':' && i + 1 < line.length() && Character.isWhitespace(line.charAt(i + 1))) {
-                i += 2; // 跳过冒号和空格
-                int start = i; // 记录数值字段的起始位置
-                StringBuilder numberBuffer = new StringBuilder();
-
-                // 读取数值字段
-                while (i < line.length()
-                        && (Character.isDigit(line.charAt(i))
-                                || line.charAt(i) == '.'
-                                || line.charAt(i) == 'E'
-                                || line.charAt(i) == 'e'
-                                || line.charAt(i) == '+'
-                                || line.charAt(i) == '-')) {
-                    numberBuffer.append(line.charAt(i));
-                    i++;
-                }
-
-                int end = i; // 记录数值字段的结束位置
-
-                // 检测字段值后面的分隔符（逗号或其他字符）
-                char separator = '\0'; // 默认无分隔符
-                if (end < line.length() && line.charAt(end) == ',') {
-                    separator = ',';
-                } else if (end < line.length() && Character.isWhitespace(line.charAt(end))) {
-                    separator = ' ';
-                }
-
-                // 如果检测到数值字段，进行处理
-                if (numberBuffer.length() > 0) {
-                    try {
-                        BigDecimal number = new BigDecimal(numberBuffer.toString());
-                        if (number.compareTo(BigDecimal.valueOf(Integer.MAX_VALUE)) > 0) {
-                            number = BigDecimal.valueOf(Integer.MAX_VALUE);
-                        } else if (number.compareTo(BigDecimal.valueOf(Integer.MIN_VALUE)) < 0) {
-                            number = BigDecimal.valueOf(Integer.MIN_VALUE);
-                        }
-
-                        // 替换原始数值字段，并保留分隔符
-                        String replacement = number.toPlainString();
-                        if (separator != '\0') {
-                            replacement += separator;
-                        }
-                        sb.replace(start, end + (separator == '\0' ? 0 : 1), replacement);
-                    } catch (NumberFormatException e) {
-                        // 如果不是数值，跳过
-                    }
-                }
-            } else {
-                i++;
+        // 先检查是否包含需要处理的事件类型
+        boolean needsProcessing = false;
+        for (String event : events) {
+            if (line.contains("\"eventType\": \"" + event + "\"")) {
+                needsProcessing = true;
+                break;
             }
         }
+        if (!needsProcessing) return line;
+
+        // 使用正则表达式匹配所有数值字段（包括科学计数法）
+        Pattern pattern = Pattern.compile("(:\\s*)(-?\\d+\\.?\\d*([eE][+-]?\\d+)?)");
+        Matcher matcher = pattern.matcher(line);
+        StringBuffer sb = new StringBuffer();
+
+        while (matcher.find()) {
+            String fullMatch = matcher.group(2);
+            try {
+                BigDecimal number = new BigDecimal(fullMatch);
+
+                // 处理int32范围限制
+                if (number.compareTo(MAX_INT32) > 0) {
+                    number = MAX_INT32;
+                } else if (number.compareTo(MIN_INT32) < 0) {
+                    number = MIN_INT32;
+                }
+
+                // 构造替换字符串（保留整数部分）
+                String replacement = number.toBigInteger().toString();
+                matcher.appendReplacement(sb, matcher.group(1) + replacement);
+            } catch (NumberFormatException e) {
+                // 非数字内容保留原始值
+                matcher.appendReplacement(sb, matcher.group(0));
+            }
+        }
+        matcher.appendTail(sb);
 
         return sb.toString();
     }
+
+    // 类常量定义
+    private static final BigDecimal MAX_INT32 = new BigDecimal(Integer.MAX_VALUE);
+    private static final BigDecimal MIN_INT32 = new BigDecimal(Integer.MIN_VALUE);
 
     private void updateModificationOptionsVisibility() {
 
@@ -1188,7 +1174,7 @@ public class MainActivity extends AppCompatActivity {
                 Toast.makeText(this, "存储权限已开启！", Toast.LENGTH_SHORT).show();
                 Toast.makeText(
                                 getApplication(),
-                                "构建日期：2025.1.23\n作者：HitMargin | QQ：2228293026",
+                                "构建日期：2025.1.30\n作者：HitMargin | QQ：2228293026",
                                 Toast.LENGTH_SHORT)
                         .show();
             }
@@ -1204,7 +1190,7 @@ public class MainActivity extends AppCompatActivity {
                 Toast.makeText(this, "所有文件访问权限已开启！", Toast.LENGTH_SHORT).show();
                 Toast.makeText(
                                 getApplication(),
-                                "构建日期：2025.1.23\n作者：HitMargin | QQ：2228293026",
+                                "构建日期：2025.1.30\n作者：HitMargin | QQ：2228293026",
                                 Toast.LENGTH_SHORT)
                         .show();
                 // 在这里执行需要权限的操作
