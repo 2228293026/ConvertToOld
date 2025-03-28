@@ -19,6 +19,7 @@ import android.os.Looper;
 import android.preference.PreferenceManager;
 import android.provider.Settings;
 import android.text.InputType;
+import android.util.Log;
 import android.view.ContextMenu;
 import android.view.MenuItem;
 import android.view.View;
@@ -73,15 +74,16 @@ import java.util.zip.ZipInputStream;
 
 public class MainActivity extends AppCompatActivity {
 
-    private static final int REQUEST_PERMISSION = 100;
+    private static final int REQUEST_LEGACY_STORAGE_PERMISSION = 100;
+    private static final int REQUEST_MANAGE_STORAGE = 101;
 
     private List<String> itemList; // 存储文件名
     private List<String> timeList; // 存储修改时间
-    private RadioButton modifyVersionOnly;
-    private RadioButton normalmodify;
+    public static RadioButton modifyVersionOnly;
+    public static RadioButton normalmodify;
     private Button explain;
     private TextView currentDirectoryTextView;
-    private RadioButton additionalmodifications;
+    public static RadioButton additionalmodifications;
     private ListView listView;
     private ArrayAdapter<String> adapter;
     private Stack<String> directoryStack;
@@ -99,7 +101,7 @@ public class MainActivity extends AppCompatActivity {
     private File file;
     private boolean actionsFound = false; // 标记是否已找到"actions":
     private String line;
-    private int selectedVersion = 0; // 默认为2.4
+    public static int selectedVersion = 0; // 默认为2.4
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -109,11 +111,11 @@ public class MainActivity extends AppCompatActivity {
         SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy.MM.dd HH:mm:ss");
         String formattedDate = dateFormat.format(currentDate);
         // Toast.makeText(getApplication(), "构建日期：" + formattedDate + "\n作者：HitMargin |
-        // QQ：2228293026", Toast.LENGTH_SHORT).show();
+        // QQ：2228293026", Toast.LENGTH_SHORT).()();
         /*
         Toast.makeText(
                         getApplication(),
-                        "构建日期：2025.1.23\n作者：HitMargin | QQ：2228293026",
+                        "构建日期：2025.3.28\n作者：HitMargin | QQ：2228293026",
                         Toast.LENGTH_SHORT)
                 .show();
         */
@@ -177,23 +179,6 @@ public class MainActivity extends AppCompatActivity {
         selectedVersion = prefs.getInt("selectedVersion", 0); // 读取用户的选择
         updateModificationOptionsVisibility();
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE)
-                            != PackageManager.PERMISSION_GRANTED
-                    || checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                            != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(
-                        new String[] {
-                            Manifest.permission.READ_EXTERNAL_STORAGE,
-                            Manifest.permission.WRITE_EXTERNAL_STORAGE
-                        },
-                        REQUEST_PERMISSION);
-            } else {
-                displayFiles(Environment.getExternalStorageDirectory());
-            }
-        } else {
-            displayFiles(Environment.getExternalStorageDirectory());
-        }
         filterButton = findViewById(R.id.filterButton);
         filterButton.setOnClickListener(
                 new View.OnClickListener() {
@@ -326,7 +311,7 @@ public class MainActivity extends AppCompatActivity {
 
         // 使用 Handler 来延迟执行，确保 UI 线程已经完成布局
         new Handler(Looper.getMainLooper())
-                .post(
+                .postDelayed(
                         () -> {
                             InputMethodManager imm =
                                     (InputMethodManager)
@@ -334,7 +319,8 @@ public class MainActivity extends AppCompatActivity {
                             if (imm != null) {
                                 imm.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT);
                             }
-                        });
+                        },
+                        100); // 增加延迟时间
     }
 
     private void displayFiles(File directory) {
@@ -454,26 +440,39 @@ public class MainActivity extends AppCompatActivity {
         builder.create().show();
     }
 
-    // 处理权限请求结果
     @Override
     public void onRequestPermissionsResult(
             int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == REQUEST_PERMISSION) {
-            boolean allPermissionsGranted = true;
-            for (int result : grantResults) {
-                if (result != PackageManager.PERMISSION_GRANTED) {
-                    allPermissionsGranted = false;
-                    break;
-                }
-            }
 
-            if (allPermissionsGranted) {
-                Toast.makeText(this, "权限已开启，可以继续操作！", Toast.LENGTH_SHORT).show();
+        // 只处理传统存储权限请求
+        if (requestCode == REQUEST_LEGACY_STORAGE_PERMISSION) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 displayFiles(Environment.getExternalStorageDirectory());
-                // 在这里执行需要权限的操作
             } else {
-                Toast.makeText(this, "权限被拒绝，部分功能可能无法使用！", Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "存储权限被拒绝", Toast.LENGTH_SHORT).show();
+            }
+        }
+    }
+
+    private void checkPermissions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // Android 11+ 使用 MANAGE_EXTERNAL_STORAGE
+            if (!Environment.isExternalStorageManager()) {
+                showPermissionPromptDialog();
+            } else {
+                displayFiles(Environment.getExternalStorageDirectory());
+            }
+        } else {
+            // 旧版本使用 READ/WRITE_EXTERNAL_STORAGE
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
+                    != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(
+                        this,
+                        new String[] {Manifest.permission.READ_EXTERNAL_STORAGE},
+                        REQUEST_LEGACY_STORAGE_PERMISSION);
+            } else {
+                displayFiles(Environment.getExternalStorageDirectory());
             }
         }
     }
@@ -734,26 +733,49 @@ public class MainActivity extends AppCompatActivity {
     // 修改行内容，如果行包含关键词则返回null
     private String modifyLine(String line) {
         // 检查关键词并可能跳过行
+        /*
+                Set<String> keywordsToSkip =
+                        Set.of(
+                                "		\"song\":",
+                                "		\"artist\":",
+                                "		\"songFilename\":",
+                                "		\"author\":",
+                                "		\"legacyFlash\":",
+                                "		\"legacyCamRelativeTo\":",
+                                "		\"legacySpriteTiles\":",
+                                "		\"artistLinks\":",
+                                "		\"levelTags\":",
+                                "		\"levelDesc\":",
+                                "		\"previewImage\":",
+                                "		\"previewIcon\":",
+                                "		\"previewIconColor\":",
+                                "		\"artistPermission\":",
+                                "		\"specialArtistType\" ",
+                                "		\"trackTexture\":",
+                                "		\"bgImage\":",
+                                "		\"bgVideo\":",
+                                "\"eventTag\":");
+        */
         Set<String> keywordsToSkip =
                 Set.of(
-                        "		\"song\"",
-                        "		\"artist\"",
-                        "		\"songFilename\"",
-                        "		\"author\"",
-                        "		\"legacyFlash\"",
-                        "		\"legacyCamRelativeTo\"",
-                        "		\"legacySpriteTiles\"",
-                        "		\"artistLinks\"",
-                        "		\"levelTags\"",
-                        "		\"levelDesc\"",
-                        "		\"previewImage\"",
-                        "		\"previewIcon\"",
-                        "		\"previewIconColor\"",
-                        "		\"artistPermission\"",
-                        "		\"specialArtistType\"",
-                        "		\"trackTexture\"",
-                        "		\"bgImage\"",
-                        "		\"bgVideo\"");
+                        "\"song\":",
+                        "\"artist\":",
+                        "\"songFilename\":",
+                        "\"author\":",
+                        "\"legacyFlash\":",
+                        "\"legacyCamRelativeTo\":",
+                        "\"legacySpriteTiles\":",
+                        "\"artistLinks\":",
+                        "\"levelTags\":",
+                        "\"levelDesc\":",
+                        "\"previewImage\":",
+                        "\"previewIcon\":",
+                        "\"previewIconColor\":",
+                        "\"artistPermission\":",
+                        "\"specialArtistType\" ",
+                        "\"trackTexture\":",
+                        "\"bgImage\":",
+                        "\"bgVideo\":");
 
         // 检查文本行中是否包含关键字，如果包含则跳过整行
         for (String keyword : keywordsToSkip) {
@@ -816,21 +838,68 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private String applyModifications(String line, boolean isAdditional) {
+        StringBuilder result = new StringBuilder();
+        int i = 0;
+        int len = line.length();
+
+        while (i < len) {
+            // 检查是否是独立的 true（不带引号，前后无其他字符）
+            if (i + 4 <= len && line.startsWith("true", i)) {
+                boolean isStandalone =
+                        (i == 0 || isSeparator(line.charAt(i - 1)))
+                                && // 前面是分隔符或行首
+                                (i + 4 == len || isSeparator(line.charAt(i + 4))); // 后面是分隔符或行尾
+
+                if (isStandalone) {
+                    result.append("\"Enabled\"");
+                    i += 4;
+                } else {
+                    result.append(line.charAt(i));
+                    i++;
+                }
+            }
+            // 检查是否是独立的 false（不带引号，前后无其他字符）
+            else if (i + 5 <= len && line.startsWith("false", i)) {
+                boolean isStandalone =
+                        (i == 0 || isSeparator(line.charAt(i - 1)))
+                                && // 前面是分隔符或行首
+                                (i + 5 == len || isSeparator(line.charAt(i + 5))); // 后面是分隔符或行尾
+
+                if (isStandalone) {
+                    result.append("\"Disabled\"");
+                    i += 5;
+                } else {
+                    result.append(line.charAt(i));
+                    i++;
+                }
+            }
+            // 其他情况直接追加字符
+            else {
+                result.append(line.charAt(i));
+                i++;
+            }
+        }
+
+        line = result.toString();
+
+        // 其他替换规则
         if (isAdditional) {
             line =
-                    line.replace("true", "\"Enabled\"")
-                            .replace("false", "\"Disabled\"")
-                            .replace("\"targetPlanet\": \"All\"", "\"targetPlanet\": \"Both\"")
+                    line.replace("\"targetPlanet\": \"All\"", "\"targetPlanet\": \"Both\"")
                             .replace("null", "0")
                             .replace("Unscaled", "FitToScreen")
                             .replace("\"lockRot\": \"Disabled\"", "\"lockRot\": \"Enabled\"");
         } else {
-            line =
-                    line.replace("true", "\"Enabled\"")
-                            .replace("false", "\"Disabled\"")
-                            .replace("\"targetPlanet\": \"All\"", "\"targetPlanet\": \"Both\"");
+            line = line.replace("\"targetPlanet\": \"All\"", "\"targetPlanet\": \"Both\"");
         }
+
         return line;
+    }
+
+    // 判断字符是否是分隔符（允许 true/false 前后出现的字符）
+    private boolean isSeparator(char c) {
+        return c == '{' || c == '}' || c == '[' || c == ']' || c == ',' || c == ':' || c == ' '
+                || c == '\t' || c == '\n' || c == '\r';
     }
 
     private String[] events = {
@@ -1110,73 +1179,49 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private boolean hasShownPermissionDialog = false;
+
     private void showPermissionPromptDialog() {
         new AlertDialog.Builder(this)
                 .setTitle("需要权限")
                 .setMessage("此应用需要访问所有文件的权限，请前往设置页面开启此权限。")
                 .setPositiveButton(
                         "前往设置",
-                        new DialogInterface.OnClickListener() {
-                            @Override
-                            public void onClick(DialogInterface dialog, int which) {
-                                // 引导用户跳转到特定应用的“所有文件访问权限”设置页面
-                                Intent intent =
-                                        new Intent(
-                                                Settings
-                                                        .ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
-                                Uri uri = Uri.fromParts("package", getPackageName(), null);
-                                intent.setData(uri);
-                                startActivity(intent);
-                            }
+                        (dialog, which) -> {
+                            Intent intent =
+                                    new Intent(
+                                            Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+                            intent.setData(Uri.fromParts("package", getPackageName(), null));
+                            startActivity(intent);
                         })
                 .setNegativeButton(
                         "取消",
-                        new DialogInterface.OnClickListener() {
-                            @Override
-                            public void onClick(DialogInterface dialog, int which) {
-                                dialog.dismiss();
-                                // 提示用户并退出应用
-                                Toast.makeText(
-                                                MainActivity.this,
-                                                "未开启权限，应用将退出！",
-                                                Toast.LENGTH_SHORT)
-                                        .show();
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
-                                    finishAffinity(); // 关闭当前任务的所有活动
-                                } else {
-                                    finish(); // 对于低版本，仅结束当前活动
-                                }
-                            }
+                        (dialog, which) -> {
+                            dialog.dismiss();
+                            Toast.makeText(MainActivity.this, "未开启权限，应用将退出！", Toast.LENGTH_SHORT)
+                                    .show();
+                            finishAffinity();
                         })
                 .setCancelable(false)
                 .show();
     }
 
     private void checkAllFilesAccessPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) { // Android 11及以上
-            if (!Environment.isExternalStorageManager()) { // 检查是否已授予所有文件访问权限
-                // 显示提示对话框
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (!Environment.isExternalStorageManager()) {
                 showPermissionPromptDialog();
             } else {
-                // 权限已开启，可以继续操作
                 Toast.makeText(this, "所有文件访问权限已开启！", Toast.LENGTH_SHORT).show();
             }
         } else {
-            // 对于Android 11以下版本，检查READ_EXTERNAL_STORAGE权限
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
                     != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(
                         this,
                         new String[] {Manifest.permission.READ_EXTERNAL_STORAGE},
-                        REQUEST_PERMISSION);
+                        REQUEST_LEGACY_STORAGE_PERMISSION);
             } else {
-                // 权限已开启，可以继续操作
                 Toast.makeText(this, "存储权限已开启！", Toast.LENGTH_SHORT).show();
-                Toast.makeText(
-                                getApplication(),
-                                "构建日期：2025.1.30\n作者：HitMargin | QQ：2228293026",
-                                Toast.LENGTH_SHORT)
-                        .show();
             }
         }
     }
@@ -1184,20 +1229,17 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        Toast.makeText(
+                        getApplication(),
+                        "更新日期：2025.3.28\n作者：HitMargin | QQ：2228293026",
+                        Toast.LENGTH_SHORT)
+                .show();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             if (Environment.isExternalStorageManager()) {
-                // 用户已授予所有文件访问权限，可以继续操作
-                Toast.makeText(this, "所有文件访问权限已开启！", Toast.LENGTH_SHORT).show();
-                Toast.makeText(
-                                getApplication(),
-                                "构建日期：2025.1.30\n作者：HitMargin | QQ：2228293026",
-                                Toast.LENGTH_SHORT)
-                        .show();
-                // 在这里执行需要权限的操作
-            } else {
-                // 用户未授予权限
-                Toast.makeText(this, "请授予所有文件访问权限以继续！", Toast.LENGTH_SHORT).show();
+                displayFiles(Environment.getExternalStorageDirectory());
             }
+        } else {
+            displayFiles(Environment.getExternalStorageDirectory());
         }
     }
 }
