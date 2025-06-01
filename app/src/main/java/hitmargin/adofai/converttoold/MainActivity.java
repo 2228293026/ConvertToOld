@@ -49,17 +49,19 @@ import java.io.File;
 import java.io.FileFilter;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.FileReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+import java.io.Writer;
 import java.math.BigDecimal;
 import java.nio.channels.FileChannel;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
@@ -95,6 +97,8 @@ public class MainActivity extends AppCompatActivity {
     private static final int MENU_DELETE = 4;
     private static final int MENU_MOVE = 5;
     private static final int MENU_UNZIP = 6;
+    private static final int MENU_NEW_FOLDER = 7;
+    private static final int MENU_NEW_FILE = 8;
     private boolean lastActionWasCopy = false;
     private Button filterButton;
     private SwipeRefreshLayout swipeRefreshLayout;
@@ -193,33 +197,97 @@ public class MainActivity extends AppCompatActivity {
                     @Override
                     public void onItemClick(
                             AdapterView<?> parent, View view, int position, long id) {
-                        String item = itemList.get(position); // 获取完整的字符串
-                        String fileName = item.split("\n")[0]; // 文件名是第一行
-                        File selectedFile = new File(currentDirectory, fileName);
+                        String item = itemList.get(position);
 
-                        if (selectedFile.isDirectory()) {
-                            try {
-                                directoryStack.push(currentDirectory.getAbsolutePath());
-                                displayFiles(selectedFile); // 跳转到新的文件夹
-                            } catch (Exception e) {
-                                e.printStackTrace();
+                        // 提取实际名称（去掉前缀）
+                        String actualName = extractActualName(item);
+
+                        // 处理返回上一级
+                        if (item.equals("[📁] ... (返回上一级)")) {
+                            File parentDir = currentDirectory.getParentFile();
+                            if (parentDir != null && parentDir.exists()) {
+                                displayFiles(parentDir);
+                            }
+                            return;
+                        }
+
+                        if (item.startsWith("[📁]")) {
+                            // 文件夹点击处理
+                            File selectedFolder = new File(currentDirectory, actualName);
+
+                            // 验证文件夹存在且可访问
+                            if (!selectedFolder.exists()) {
                                 Toast.makeText(
                                                 MainActivity.this,
-                                                "无法打开文件夹：" + e.getMessage(),
+                                                "文件夹不存在: " + actualName,
                                                 Toast.LENGTH_SHORT)
                                         .show();
+                                return;
                             }
-                        } else {
-                            if (fileName.toLowerCase().endsWith(".adofai")) {
-                                ConvertToOld(selectedFile);
+
+                            if (!selectedFolder.isDirectory()) {
+                                Toast.makeText(
+                                                MainActivity.this,
+                                                "不是有效的文件夹: " + actualName,
+                                                Toast.LENGTH_SHORT)
+                                        .show();
+                                return;
+                            }
+
+                            if (!selectedFolder.canRead()) {
+                                Toast.makeText(
+                                                MainActivity.this,
+                                                "无权限访问文件夹: " + actualName,
+                                                Toast.LENGTH_SHORT)
+                                        .show();
+                                return;
+                            }
+
+                            // 添加到目录栈并显示内容
+                            directoryStack.push(currentDirectory.getAbsolutePath());
+                            displayFiles(selectedFolder);
+
+                        } else if (item.startsWith("[📄]")) {
+                            // 文件点击处理
+                            File selectedFile = new File(currentDirectory, actualName);
+
+                            if (selectedFile.exists() && selectedFile.isFile()) {
+                                if (actualName.toLowerCase().endsWith(".adofai")) {
+                                    ConvertToOld(selectedFile);
+                                } else if (actualName.toLowerCase().endsWith(".zip")) {
+                                    unZipFile(selectedFile);
+                                } else {
+                                    Toast.makeText(
+                                                    MainActivity.this,
+                                                    "不支持的文件类型: " + actualName,
+                                                    Toast.LENGTH_SHORT)
+                                            .show();
+                                }
                             } else {
                                 Toast.makeText(
                                                 MainActivity.this,
-                                                "该文件不是.adofai文件",
+                                                "文件不存在或无效: " + actualName,
                                                 Toast.LENGTH_SHORT)
                                         .show();
                             }
                         }
+                    }
+                });
+
+        listView.setOnItemLongClickListener(
+                new AdapterView.OnItemLongClickListener() {
+                    @Override
+                    public boolean onItemLongClick(
+                            AdapterView<?> parent, View view, int position, long id) {
+                        String item = itemList.get(position);
+
+                        // 长按返回上一级，显示选项
+                        if (item.equals("[📁] ... (返回上一级)")) {
+                            showCreateDialog();
+                            return true;
+                        }
+
+                        return false;
                     }
                 });
 
@@ -229,7 +297,7 @@ public class MainActivity extends AppCompatActivity {
                     @Override
                     public void onClick(View view) {
                         String message =
-                                "需知：特殊修改：修复移动摄像头错误和背景错误\n只修改版本号是为11\n该工具免费提供！禁止倒卖\n更新内容如下\n修复错误\n(如果出错请在编辑器里重新保存关卡再转换),修复暂停节拍错误,新增版本选择，用的什么版本就选择哪个版本,新增修复自由轨道/n只显示文件夹/.adofai文件，SDK版本调新，所有文件访问权限需要开启";
+                                "需知：特殊修改：修复移动摄像头错误和背景错误\n只修改版本号是为11\n该工具免费提供！禁止倒卖\n更新内容如下\n修复错误\n(如果出错请在编辑器里重新保存关卡再转换),修复暂停节拍错误,新增版本选择，用的什么版本就选择哪个版本,新增修复自由轨道/n只显示文件夹/.adofai文件，SDK版本调新，所有文件访问权限需要开启\n1.3.0新增文件夹/文件图标显示，添加返回上一目录长按可以选择新增文件/文件夹/粘贴";
                         showMessageDialog(message);
                     }
                 });
@@ -258,6 +326,16 @@ public class MainActivity extends AppCompatActivity {
 
         // 刷新完成后，调用此方法来关闭刷新指示器
         swipeRefreshLayout.setRefreshing(false);
+    }
+
+    // 添加辅助方法提取实际名称
+    private String extractActualName(String displayName) {
+        // 查找第一个空格后的位置
+        int spaceIndex = displayName.indexOf(' ');
+        if (spaceIndex != -1 && spaceIndex + 1 < displayName.length()) {
+            return displayName.substring(spaceIndex + 1);
+        }
+        return displayName;
     }
 
     private void showPathInputDialog() {
@@ -323,58 +401,79 @@ public class MainActivity extends AppCompatActivity {
                         100); // 增加延迟时间
     }
 
+    // 修改 displayFiles 方法，添加更多日志和验证
     private void displayFiles(File directory) {
+        if (directory == null || !directory.exists() || !directory.isDirectory()) {
+            Log.e(
+                    "MainActivity",
+                    "无效目录: " + (directory != null ? directory.getAbsolutePath() : "null"));
+            Toast.makeText(this, "无法访问目录", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        if (!directory.canRead()) {
+            Log.e("MainActivity", "无读取权限: " + directory.getAbsolutePath());
+            Toast.makeText(this, "无目录读取权限", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
         try {
             currentDirectory = directory;
-            currentDirectoryTextView.setText("当前目录：" + directory.getAbsolutePath());
+            String currentPath = directory.getAbsolutePath();
+            currentDirectoryTextView.setText("当前目录: " + currentPath);
             itemList.clear();
 
-            File[] files =
-                    directory.listFiles(
-                            new FileFilter() {
-                                @Override
-                                public boolean accept(File file) {
-                                    if (file.isDirectory()) {
-                                        return true;
-                                    }
-                                    // 修改这里：添加对.zip文件的判断
-                                    String name = file.getName().toLowerCase();
-                                    return name.endsWith(".adofai") || name.endsWith(".zip");
-                                }
-                            });
+            // 添加返回上一级选项（如果有父目录且父目录存在）
+            File parent = currentDirectory.getParentFile();
+            if (parent != null && parent.exists()) {
+                itemList.add("[📁] ... (返回上一级)");
+            }
 
+            File[] files = directory.listFiles();
             if (files != null) {
                 // 分别存储文件夹和文件
                 List<File> folders = new ArrayList<>();
-                List<File> validFiles = new ArrayList<>(); // 修改变量名
+                List<File> validFiles = new ArrayList<>();
 
                 for (File file : files) {
+                    if (file.isHidden()) continue; // 跳过隐藏文件
+
                     if (file.isDirectory()) {
                         folders.add(file);
                     } else {
-                        validFiles.add(file); // 包含.adofai和.zip文件
+                        String name = file.getName().toLowerCase();
+                        if (name.endsWith(".adofai") || name.endsWith(".zip")) {
+                            validFiles.add(file);
+                        }
                     }
                 }
 
-                // 对文件夹和文件分别排序
-                folders.sort((f1, f2) -> f1.getName().compareTo(f2.getName()));
-                validFiles.sort((f1, f2) -> f1.getName().compareTo(f2.getName())); // 排序所有有效文件
+                // 排序
+                folders.sort((f1, f2) -> f1.getName().compareToIgnoreCase(f2.getName()));
+                validFiles.sort((f1, f2) -> f1.getName().compareToIgnoreCase(f2.getName()));
 
-                // 先添加文件夹，再添加文件
+                // 添加文件夹
                 for (File folder : folders) {
-                    itemList.add(folder.getName());
+                    itemList.add("[📁] " + folder.getName());
                 }
+
+                // 添加文件
                 for (File validFile : validFiles) {
-                    itemList.add(validFile.getName());
+                    itemList.add("[📄] " + validFile.getName());
                 }
+            } else {
+                Log.w("MainActivity", "空目录: " + currentPath);
             }
 
             adapter.notifyDataSetChanged();
             swipeRefreshLayout.setRefreshing(false);
+
+        } catch (SecurityException e) {
+            Log.e("MainActivity", "安全异常: " + e.getMessage());
+            Toast.makeText(this, "权限不足: " + e.getMessage(), Toast.LENGTH_SHORT).show();
         } catch (Exception e) {
-            e.printStackTrace();
-            Toast.makeText(MainActivity.this, "无法加载目录：" + e.getMessage(), Toast.LENGTH_SHORT)
-                    .show();
+            Log.e("MainActivity", "错误: " + e.getMessage(), e);
+            Toast.makeText(this, "错误: " + e.getMessage(), Toast.LENGTH_SHORT).show();
         }
     }
 
@@ -418,15 +517,18 @@ public class MainActivity extends AppCompatActivity {
         File[] files = directory.listFiles();
         if (files != null) {
             for (File file : files) {
-                if (file.getName().toLowerCase().contains(filter.toLowerCase())) {
-                    itemList.add(file.getName());
+                String displayName =
+                        file.isDirectory() ? "[📁] " + file.getName() : "[📄] " + file.getName();
+
+                if (displayName.toLowerCase().contains(filter.toLowerCase())) {
+                    itemList.add(displayName);
                 }
             }
         }
         adapter.notifyDataSetChanged();
     }
 
-    private void showMessageDialog(String message) {
+    public void showMessageDialog(String message) {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setMessage(message)
                 .setPositiveButton(
@@ -478,80 +580,110 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
-    public void onCreateContextMenu(
-            ContextMenu menu, View v, ContextMenu.ContextMenuInfo menuInfo) {
-        super.onCreateContextMenu(menu, v, menuInfo);
-        if (v.getId() == R.id.listView) {
-            AdapterView.AdapterContextMenuInfo info = (AdapterView.AdapterContextMenuInfo) menuInfo;
-            String selectedItem = itemList.get(info.position);
-            menu.setHeaderTitle(selectedItem);
-            menu.add(0, MENU_COPY, 0, "复制");
-            menu.add(0, MENU_MOVE, 0, "移动");
-            if (copiedFile != null) menu.add(0, MENU_PASTE, 0, "粘贴");
-            menu.add(0, MENU_RENAME, 0, "重命名");
-            menu.add(0, MENU_DELETE, 0, "删除");
-            File selectedFile = new File(currentDirectory, selectedItem);
-
-            // 检查文件是否为ZIP格式
-            if (selectedFile.isFile() && selectedItem.toLowerCase().endsWith(".zip")) {
-                menu.setHeaderTitle(selectedItem);
-                // 如果是ZIP文件，添加“解压”选项到菜单
-                menu.add(0, MENU_UNZIP, 0, "解压");
-            }
-        }
-    }
-
-    @Override
     public boolean onContextItemSelected(MenuItem item) {
         AdapterView.AdapterContextMenuInfo info =
                 (AdapterView.AdapterContextMenuInfo) item.getMenuInfo();
+        int position = info.position;
+        if (position < 0 || position >= itemList.size()) {
+            return false;
+        }
         String selectedItem = itemList.get(info.position);
-        final File selectedFile = new File(currentDirectory, selectedItem);
+
+        // 跳过返回上一级项
+        if (selectedItem.equals("[📁] ... (返回上一级)")) {
+            return false;
+        }
+
+        // 去除前缀标识（"[📁] " 或 "[📄] "）
+        String actualName = extractActualName(selectedItem);
+        final File selectedFile = new File(currentDirectory, actualName);
+
         switch (item.getItemId()) {
             case MENU_COPY:
                 copiedFile = selectedFile;
                 lastActionWasCopy = true;
-                Toast.makeText(this, "已选择：" + selectedItem, Toast.LENGTH_SHORT).show();
+                Toast.makeText(this, "已选择：" + actualName, Toast.LENGTH_SHORT).show();
                 return true;
-            case MENU_RENAME:
-                final EditText renameEditText = new EditText(this);
-                renameEditText.setInputType(InputType.TYPE_CLASS_TEXT);
 
-                // 提取文件名和后缀
-                String fileName = selectedItem;
-                final String fileExtension; // 声明为 final
-                int dotIndex = fileName.lastIndexOf('.');
-                if (dotIndex > 0) {
-                    fileExtension = fileName.substring(dotIndex); // 提取后缀
-                    fileName = fileName.substring(0, dotIndex); // 提取文件名部分
-                } else {
-                    fileExtension = ""; // 如果没有后缀，设置为空字符串
+            case MENU_MOVE:
+                copiedFile = selectedFile;
+                lastActionWasCopy = false;
+                Toast.makeText(this, "已选择：" + actualName, Toast.LENGTH_SHORT).show();
+                return true;
+
+            case MENU_PASTE:
+                if (copiedFile == null || !copiedFile.exists()) {
+                    showMessageDialog("没有可粘贴的文件或文件已不存在！");
+                    return true;
                 }
 
-                renameEditText.setText(fileName); // 设置文件名部分作为默认值
-                renameEditText.selectAll(); // 选中文件名部分，方便用户修改
+                try {
+                    String newName = copiedFile.getName();
+                    File newFile = new File(currentDirectory, newName);
+
+                    // 处理文件名冲突
+                    int counter = 1;
+                    while (newFile.exists()) {
+                        String nameWithoutExt = newName.replaceFirst("[.][^.]+$", "");
+                        String ext =
+                                newName.contains(".")
+                                        ? newName.substring(newName.lastIndexOf('.'))
+                                        : "";
+                        newFile =
+                                new File(
+                                        currentDirectory,
+                                        nameWithoutExt + " (" + counter + ")" + ext);
+                        counter++;
+                    }
+
+                    if (lastActionWasCopy) {
+                        // 使用正确的复制方法
+                        copyFileOrDirectory(copiedFile, newFile);
+                        showMessageDialog("复制成功！");
+                    } else {
+                        // 优化移动操作
+                        if (moveFile(copiedFile, newFile)) {
+                            showMessageDialog("移动成功！");
+                        } else {
+                            showMessageDialog("移动失败！");
+                        }
+                    }
+                    displayFiles(currentDirectory);
+                } catch (IOException e) {
+                    showMessageDialog("操作失败: " + e.getMessage());
+                }
+                return true;
+
+            case MENU_RENAME:
+                final String oldName = selectedFile.getName();
+                final EditText input = new EditText(this);
+                input.setText(oldName);
+                input.setSelection(
+                        0,
+                        oldName.lastIndexOf('.') > 0 ? oldName.lastIndexOf('.') : oldName.length());
 
                 new AlertDialog.Builder(this)
                         .setTitle("重命名")
-                        .setMessage("输入新的文件名称")
-                        .setView(renameEditText)
+                        .setView(input)
                         .setPositiveButton(
                                 "确定",
-                                new DialogInterface.OnClickListener() {
-                                    @Override
-                                    public void onClick(DialogInterface dialog, int which) {
-                                        String newName = renameEditText.getText().toString();
-                                        if (!newName.isEmpty()) {
-                                            newName += fileExtension; // 添加后缀
-                                            File newFile = new File(currentDirectory, newName);
-                                            if (selectedFile.renameTo(newFile)) {
-                                                displayFiles(currentDirectory);
-                                                showMessageDialog("重命名成功！");
-                                            } else {
-                                                showMessageDialog("重命名失败！");
+                                (dialog, which) -> {
+                                    String newName = input.getText().toString().trim();
+                                    if (!newName.isEmpty()) {
+                                        // 保持文件扩展名
+                                        if (selectedFile.isFile() && !newName.contains(".")) {
+                                            int dotIndex = oldName.lastIndexOf('.');
+                                            if (dotIndex > 0) {
+                                                newName += oldName.substring(dotIndex);
                                             }
+                                        }
+
+                                        File newFile = new File(selectedFile.getParent(), newName);
+                                        if (selectedFile.renameTo(newFile)) {
+                                            displayFiles(currentDirectory);
+                                            showMessageDialog("重命名成功！");
                                         } else {
-                                            showMessageDialog("文件名不能为空！");
+                                            showMessageDialog("重命名失败！");
                                         }
                                     }
                                 })
@@ -561,13 +693,13 @@ public class MainActivity extends AppCompatActivity {
             case MENU_DELETE:
                 new AlertDialog.Builder(this)
                         .setTitle("确认删除")
-                        .setMessage("确定要删除 " + selectedItem + " 吗？")
+                        .setMessage("确定要删除 " + actualName + " 吗？")
                         .setPositiveButton(
                                 "确定",
                                 new DialogInterface.OnClickListener() {
                                     @Override
                                     public void onClick(DialogInterface dialog, int which) {
-                                        if (deleteFile(selectedFile)) {
+                                        if (deleteRecursive(selectedFile)) {
                                             displayFiles(currentDirectory);
                                             showMessageDialog("删除成功！");
                                         } else {
@@ -578,94 +710,290 @@ public class MainActivity extends AppCompatActivity {
                         .setNegativeButton("取消", null)
                         .show();
                 return true;
-            case MENU_MOVE:
-                copiedFile = selectedFile;
-                lastActionWasCopy = false;
-                showMessageDialog("已选择：" + selectedItem + " ！");
-                return true;
-            case MENU_PASTE:
-                if (lastActionWasCopy && copiedFile != null) { // 如果上一次操作是复制
-                    File newFile = new File(currentDirectory, copiedFile.getName());
-                    try {
-                        // 复制文件
-                        copyFile(copiedFile, newFile);
-                        displayFiles(currentDirectory);
-                        showMessageDialog("已复制到：" + currentDirectory.getAbsolutePath() + " ！");
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                        showMessageDialog("无法复制文件！");
-                    }
-                } else if (!lastActionWasCopy && copiedFile != null) { // 如果上一次操作是移动
-                    File newFile = new File(currentDirectory, copiedFile.getName());
-                    try {
-                        // 移动文件
-                        if (copiedFile.renameTo(newFile)) {
-                            displayFiles(currentDirectory);
-                            showMessageDialog("已移动到：" + currentDirectory.getAbsolutePath() + " ！");
-                        } else {
-                            showMessageDialog("移动文件失败！");
-                        }
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                        showMessageDialog("移动文件失败！");
-                    }
-                } else {
-                    showMessageDialog("请先选择要移动或复制的文件！");
-                }
-                return true;
+
             case MENU_UNZIP:
-                // 用户选择“解压”选项
                 unZipFile(selectedFile);
-                displayFiles(currentDirectory);
-
-                showMessageDialog("已解压到：" + currentDirectory.getAbsolutePath() + " ！");
-
                 return true;
+
             default:
                 return super.onContextItemSelected(item);
         }
     }
 
+    // 删除文件或文件夹
+    private void copyFileOrDirectory(File source, File dest) throws IOException {
+        if (source.isDirectory()) {
+            if (!dest.exists() && !dest.mkdirs()) {
+                throw new IOException("无法创建目录: " + dest.getAbsolutePath());
+            }
+
+            File[] files = source.listFiles();
+            if (files != null) {
+                for (File file : files) {
+                    File newFile = new File(dest, file.getName());
+                    copyFileOrDirectory(file, newFile);
+                }
+            }
+        } else {
+            try (FileInputStream in = new FileInputStream(source);
+                    FileOutputStream out = new FileOutputStream(dest)) {
+
+                FileChannel inChannel = in.getChannel();
+                FileChannel outChannel = out.getChannel();
+                inChannel.transferTo(0, inChannel.size(), outChannel);
+            }
+        }
+    }
+
+    // 添加移动文件/目录的方法
+    private boolean moveFile(File source, File dest) {
+        try {
+            // 先尝试直接重命名
+            if (source.renameTo(dest)) {
+                return true;
+            }
+
+            // 如果重命名失败，尝试复制后删除
+            copyFileOrDirectory(source, dest);
+            return deleteRecursive(source);
+        } catch (IOException e) {
+            Log.e("FileMove", "移动文件失败", e);
+            return false;
+        }
+    }
+
+    // 添加递归删除方法
+    private boolean deleteRecursive(File file) {
+        if (file.isDirectory()) {
+            File[] files = file.listFiles();
+            if (files != null) {
+                for (File child : files) {
+                    if (!deleteRecursive(child)) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return file.delete();
+    }
+
+    // 修复解压功能
+    private void unZipFile(File zipFile) {
+        String zipFileName = zipFile.getName();
+        String zipFileNameWithoutExtension = zipFileName.substring(0, zipFileName.lastIndexOf('.'));
+        String destinationDir = zipFile.getParent() + File.separator + zipFileNameWithoutExtension;
+
+        File destinationFolder = new File(destinationDir);
+        if (!destinationFolder.exists()) {
+            destinationFolder.mkdirs();
+        }
+
+        try (ZipInputStream zipIn = new ZipInputStream(new FileInputStream(zipFile))) {
+            ZipEntry zipEntry;
+            while ((zipEntry = zipIn.getNextEntry()) != null) {
+                String entryName = zipEntry.getName();
+                String filePath = destinationDir + File.separator + entryName;
+
+                if (zipEntry.isDirectory()) {
+                    File dir = new File(filePath);
+                    dir.mkdirs();
+                } else {
+                    extractFile(zipIn, filePath);
+                }
+
+                zipIn.closeEntry();
+            }
+
+            showMessageDialog("解压完成！");
+            displayFiles(currentDirectory);
+        } catch (IOException e) {
+            e.printStackTrace();
+            showMessageDialog("解压失败！");
+        }
+    }
+
+    private static void extractFile(ZipInputStream zipIn, String filePath) throws IOException {
+        try (BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(filePath))) {
+            byte[] bytesIn = new byte[4096];
+            int read;
+            while ((read = zipIn.read(bytesIn)) != -1) {
+                bos.write(bytesIn, 0, read);
+            }
+        }
+    }
+
+    // 添加长按返回上一级时的新建文件夹/文件/粘贴功能
+    @Override
+    public void onCreateContextMenu(
+            ContextMenu menu, View v, ContextMenu.ContextMenuInfo menuInfo) {
+        super.onCreateContextMenu(menu, v, menuInfo);
+        if (v.getId() == R.id.listView) {
+            AdapterView.AdapterContextMenuInfo info = (AdapterView.AdapterContextMenuInfo) menuInfo;
+            String selectedItem = itemList.get(info.position);
+
+            // 跳过返回上一级项
+            if (selectedItem.equals("[📁] ... (返回上一级)")) {
+                menu.setHeaderTitle("操作");
+                menu.add(0, MENU_NEW_FOLDER, 0, "新建文件夹");
+                menu.add(0, MENU_NEW_FILE, 0, "新建文件");
+                if (copiedFile != null) {
+                    menu.add(0, MENU_PASTE, 0, "粘贴");
+                }
+                return;
+            }
+
+            // 去除前缀标识
+            String actualName = selectedItem.substring(4);
+
+            menu.setHeaderTitle(actualName); // 显示实际文件名
+            menu.add(0, MENU_COPY, 0, "复制");
+            menu.add(0, MENU_MOVE, 0, "移动");
+            if (copiedFile != null) menu.add(0, MENU_PASTE, 0, "粘贴");
+            menu.add(0, MENU_RENAME, 0, "重命名");
+            menu.add(0, MENU_DELETE, 0, "删除");
+
+            File selectedFile = new File(currentDirectory, actualName);
+
+            // 检查文件是否为ZIP格式
+            if (selectedFile.isFile() && actualName.toLowerCase().endsWith(".zip")) {
+                menu.add(0, MENU_UNZIP, 0, "解压");
+            }
+        }
+    }
+
+    // 新建文件夹功能
+    private void createNewFolder() {
+        final EditText input = new EditText(this);
+        input.setInputType(InputType.TYPE_CLASS_TEXT);
+        new AlertDialog.Builder(this)
+                .setTitle("新建文件夹")
+                .setMessage("请输入文件夹名称")
+                .setView(input)
+                .setPositiveButton(
+                        "确定",
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which) {
+                                String folderName = input.getText().toString().trim();
+                                if (!folderName.isEmpty()) {
+                                    File newFolder = new File(currentDirectory, folderName);
+                                    if (newFolder.mkdir()) {
+                                        displayFiles(currentDirectory);
+                                        showMessageDialog("文件夹创建成功！");
+                                    } else {
+                                        showMessageDialog("文件夹创建失败！");
+                                    }
+                                } else {
+                                    showMessageDialog("文件夹名称不能为空！");
+                                }
+                            }
+                        })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    // 新建文件功能
+    private void createNewFile() {
+        final EditText input = new EditText(this);
+        input.setInputType(InputType.TYPE_CLASS_TEXT);
+        new AlertDialog.Builder(this)
+                .setTitle("新建文件")
+                .setMessage("请输入文件名称")
+                .setView(input)
+                .setPositiveButton(
+                        "确定",
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which) {
+                                String fileName = input.getText().toString().trim();
+                                if (!fileName.isEmpty()) {
+                                    File newFile = new File(currentDirectory, fileName);
+                                    try {
+                                        if (newFile.createNewFile()) {
+                                            displayFiles(currentDirectory);
+                                            showMessageDialog("文件创建成功！");
+                                        } else {
+                                            showMessageDialog("文件创建失败！");
+                                        }
+                                    } catch (IOException e) {
+                                        e.printStackTrace();
+                                        showMessageDialog("文件创建失败！");
+                                    }
+                                } else {
+                                    showMessageDialog("文件名称不能为空！");
+                                }
+                            }
+                        })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    // 修改 onBackPressed 方法
     @Override
     public void onBackPressed() {
         if (!directoryStack.isEmpty()) {
             String previousPath = directoryStack.pop();
             displayFiles(new File(previousPath));
         } else {
-            super.onBackPressed();
-        }
-    }
-
-    private void copyFile(File sourceFile, File destFile) throws IOException {
-        if (!destFile.exists()) {
-            destFile.createNewFile();
-        }
-        FileChannel source = null;
-        FileChannel destination = null;
-        try {
-            source = new FileInputStream(sourceFile).getChannel();
-            destination = new FileOutputStream(destFile).getChannel();
-            destination.transferFrom(source, 0, source.size());
-        } finally {
-            if (source != null) {
-                source.close();
-            }
-            if (destination != null) {
-                destination.close();
+            File parent = currentDirectory.getParentFile();
+            if (parent != null && parent.exists()) {
+                displayFiles(parent);
+            } else {
+                super.onBackPressed();
             }
         }
     }
 
-    private boolean deleteFile(File file) {
-        if (file.isDirectory()) {
-            File[] files = file.listFiles();
-            if (files != null) {
-                for (File child : files) {
-                    deleteFile(child);
-                }
-            }
-        }
-        return file.delete();
+    // 添加长按返回上一级时的新建文件夹/文件/粘贴功能
+    private void showCreateDialog() {
+        final String[] options = {"新建文件夹", "新建文件", "粘贴"};
+        final AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("选择操作")
+                .setItems(
+                        options,
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which) {
+                                String selectedOption = options[which];
+                                if ("新建文件夹".equals(selectedOption)) {
+                                    createNewFolder();
+                                } else if ("新建文件".equals(selectedOption)) {
+                                    createNewFile();
+                                } else if ("粘贴".equals(selectedOption)) {
+                                    if (copiedFile != null) {
+                                        String copiedFileName = copiedFile.getName();
+                                        File newFile = new File(currentDirectory, copiedFileName);
+
+                                        if (lastActionWasCopy) { // 复制操作
+                                            try {
+                                                copyFileOrDirectory(copiedFile, newFile);
+                                                displayFiles(currentDirectory);
+                                                showMessageDialog(
+                                                        "已粘贴到："
+                                                                + currentDirectory.getAbsolutePath()
+                                                                + " ！");
+                                            } catch (IOException e) {
+                                                e.printStackTrace();
+                                                showMessageDialog("无法粘贴文件！");
+                                            }
+                                        } else { // 移动操作
+                                            if (copiedFile.renameTo(newFile)) {
+                                                displayFiles(currentDirectory);
+                                                showMessageDialog(
+                                                        "已移动到："
+                                                                + currentDirectory.getAbsolutePath()
+                                                                + " ！");
+                                            } else {
+                                                showMessageDialog("移动文件失败！");
+                                            }
+                                        }
+                                    } else {
+                                        showMessageDialog("没有已复制或已选择的文件！");
+                                    }
+                                }
+                            }
+                        });
+        builder.create().show();
     }
 
     public void ConvertToOld(File file) {
@@ -753,8 +1081,7 @@ public class MainActivity extends AppCompatActivity {
                                 "		\"specialArtistType\" ",
                                 "		\"trackTexture\":",
                                 "		\"bgImage\":",
-                                "		\"bgVideo\":",
-                                "\"eventTag\":");
+                                "		\"bgVideo\":");
         */
         Set<String> keywordsToSkip =
                 Set.of(
@@ -1105,7 +1432,7 @@ public class MainActivity extends AppCompatActivity {
                         defaultDir,
                         originalFile.getName().replace(".adofai", versionSuffix + "_old.adofai"));
         try {
-            FileWriter writer = new FileWriter(saveFile);
+            Writer writer = new FileWriter(saveFile);
             writer.write(fileContent);
             writer.close();
 
@@ -1116,40 +1443,6 @@ public class MainActivity extends AppCompatActivity {
 
         } catch (IOException e) {
             e.printStackTrace();
-        }
-    }
-
-    private static void unZipFile(File zipFile) {
-        String zipFileName = zipFile.getName();
-        String zipFileNameWithoutExtension = zipFileName.substring(0, zipFileName.lastIndexOf('.'));
-        String destinationDir = zipFile.getParent() + File.separator + zipFileNameWithoutExtension;
-
-        // 创建与ZIP文件同名的目录
-        File destinationFolder = new File(destinationDir);
-        if (!destinationFolder.exists()) {
-            destinationFolder.mkdirs();
-        }
-
-        try (ZipInputStream zipIn = new ZipInputStream(new FileInputStream(zipFile))) {
-            ZipEntry zipEntry;
-            while ((zipEntry = zipIn.getNextEntry()) != null) {
-                String entryName = zipEntry.getName();
-                String filePath = destinationDir + File.separator + entryName;
-
-                if (zipEntry.isDirectory()) {
-                    File dir = new File(filePath);
-                    dir.mkdirs();
-                } else {
-                    extractFile(zipIn, filePath); // 提取文件到指定路径
-                }
-
-                zipIn.closeEntry();
-            }
-
-            String message = "解压完成！";
-        } catch (IOException e) {
-            e.printStackTrace();
-            String message = "解压失败！";
         }
     }
 
@@ -1165,16 +1458,6 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 String filePath = basePath + File.separator + file.getName();
                 extractFile(zipIn, filePath);
-            }
-        }
-    }
-
-    private static void extractFile(ZipInputStream zipIn, String filePath) throws IOException {
-        try (BufferedOutputStream bos = new BufferedOutputStream(new FileOutputStream(filePath))) {
-            byte[] bytesIn = new byte[4096];
-            int read;
-            while ((read = zipIn.read(bytesIn)) != -1) {
-                bos.write(bytesIn, 0, read);
             }
         }
     }
@@ -1231,7 +1514,7 @@ public class MainActivity extends AppCompatActivity {
         super.onResume();
         Toast.makeText(
                         getApplication(),
-                        "更新日期：2025.3.28\n作者：HitMargin | QQ：2228293026",
+                        "更新日期：2025.6.1\n作者：HitMargin | QQ：2228293026",
                         Toast.LENGTH_SHORT)
                 .show();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
